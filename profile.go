@@ -34,6 +34,10 @@ type ProfileBlock struct {
 	NumStmt, Count      int
 }
 
+func (pb *ProfileBlock) String() string {
+	return strconv.Itoa(pb.StartLine) + strconv.Itoa(pb.StartCol) + strconv.Itoa(pb.EndLine) + strconv.Itoa(pb.EndCol) + strconv.Itoa(pb.NumStmt)
+}
+
 type byFileName []*Profile
 
 func (p byFileName) Len() int           { return len(p) }
@@ -50,6 +54,7 @@ func ParseProfiles(in io.Reader) ([]*Profile, error) {
 	// where the fields are: name.go:line.column,line.column numberOfStatements count
 	s := bufio.NewScanner(in)
 	mode := ""
+	lineList := make(map[string]map[string]int)
 	for s.Scan() {
 		line := s.Text()
 		if mode == "" {
@@ -73,14 +78,26 @@ func ParseProfiles(in io.Reader) ([]*Profile, error) {
 			}
 			files[fn] = p
 		}
-		p.Blocks = append(p.Blocks, ProfileBlock{
+
+		profileBlock := ProfileBlock{
 			StartLine: toInt(m[2]),
 			StartCol:  toInt(m[3]),
 			EndLine:   toInt(m[4]),
 			EndCol:    toInt(m[5]),
 			NumStmt:   toInt(m[6]),
 			Count:     toInt(m[7]),
-		})
+		}
+
+		if id, exists := lineList[fn][profileBlock.String()]; exists {
+			p.Blocks[id].Count += profileBlock.Count
+		} else {
+			if _, ok := lineList[fn]; !ok {
+				lineList[fn] = make(map[string]int)
+			}
+			id = len(p.Blocks)
+			p.Blocks = append(p.Blocks, profileBlock)
+			lineList[fn][profileBlock.String()] = id
+		}
 	}
 	if err := s.Err(); err != nil {
 		return nil, err
